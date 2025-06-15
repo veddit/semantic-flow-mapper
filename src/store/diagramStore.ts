@@ -1,4 +1,3 @@
-
 import { create } from 'zustand';
 import { DiagramModel, DiagramNode, DiagramEdge, ValidationError, Block, Phase, Action } from '../types/diagram';
 import { sampleDiagram } from './sampleDiagram';
@@ -21,7 +20,7 @@ interface DiagramStore {
   addEdge: (edge: DiagramEdge) => void;
   updateEdge: (id: string, updates: Partial<DiagramEdge>) => void;
   deleteEdge: (id: string) => void;
-  nestActionInBlock: (actionId: string, blockId: string) => void;
+  nestActionInBlock: (actionId: string, destBlockId: string) => void;
   removeActionFromBlock: (actionId: string) => void;
   startConnection: (nodeId: string) => void;
   completeConnection: (targetNodeId: string, edgeType?: 'choice' | 'any' | 'parallel', descriptor?: string) => void;
@@ -56,28 +55,33 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
     return `${prefix}${timestamp}${random}`;
   },
 
-  nestActionInBlock: (actionId, blockId) => {
+  nestActionInBlock: (actionId, destBlockId) => {
     set((state) => {
+      const actionNode = state.model.nodes.find(
+        node => node.id === actionId && node.type === 'action'
+      );
+      // Determine original block
+      const originalBlockId = actionNode && 'parentBlock' in actionNode ? actionNode.parentBlock : null;
       const newNodes: DiagramNode[] = state.model.nodes.map(node => {
-        // If action node, update its parentBlock only
-        if (node.id === actionId && node.type === 'action') {
-          const action = node as Action;
-          return { ...action, parentBlock: blockId } as Action;
-        }
-        // If block node, ensure type is Block and update childActions
-        if (node.id === blockId && node.type === 'block') {
+        // Remove from any previous block
+        if (node.type === 'block') {
           const block = node as Block;
-          const updatedChildActions = block.childActions.includes(actionId)
-            ? block.childActions
-            : [...block.childActions, actionId];
-          return {
-            id: block.id,
-            label: block.label,
-            type: 'block',
-            parentPhase: block.parentPhase,
-            childActions: updatedChildActions,
-            expanded: true,
-          } as Block;
+          // Remove actionId from childActions if present (from ALL blocks)
+          const pruned = block.childActions.filter(id => id !== actionId);
+          // If this is the destination block, append actionId at end (if not present)
+          if (block.id === destBlockId && !pruned.includes(actionId)) {
+            return {
+              ...block,
+              childActions: [...pruned, actionId],
+              expanded: true,
+            } as Block;
+          }
+          return { ...block, childActions: pruned } as Block;
+        }
+
+        // Update parentBlock for action node
+        if (node.id === actionId && node.type === 'action') {
+          return { ...node, parentBlock: destBlockId } as Action;
         }
         return node;
       });
@@ -85,7 +89,7 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
         model: {
           ...state.model,
           nodes: newNodes,
-        }
+        },
       };
     });
     get().validateModel();
@@ -126,7 +130,10 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
 
   completeConnection: (targetNodeId, edgeType = 'any', descriptor) => {
     const { connectionState, addEdge, generateId, canConnect } = get();
-    if (!connectionState.sourceNodeId || !canConnect(connectionState.sourceNodeId, targetNodeId)) {
+    if (
+      !connectionState.sourceNodeId ||
+      !canConnect(connectionState.sourceNodeId, targetNodeId)
+    ) {
       get().cancelConnection();
       return;
     }
@@ -137,7 +144,17 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
       type: edgeType,
       descriptor,
     };
-    addEdge(newEdge);
+    // Prevent duplicate edges
+    const { model } = get();
+    const exists = model.edges.some(
+      e =>
+        e.from === newEdge.from &&
+        e.to === newEdge.to &&
+        e.type === newEdge.type
+    );
+    if (!exists) {
+      addEdge(newEdge);
+    }
     get().cancelConnection();
   },
 
@@ -165,9 +182,16 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
     const sourceNode = model.nodes.find(n => n.id === sourceId);
     const targetNode = model.nodes.find(n => n.id === targetId);
     if (!sourceNode || !targetNode || sourceId === targetId) return false;
-    // Actions and blocks can connect to other actions and blocks
-    return (sourceNode.type === 'action' || sourceNode.type === 'block') && 
-           (targetNode.type === 'action' || targetNode.type === 'block');
+    // Allow connecting action→action, action→block, block→block, block→action (no self-links)
+    // Prevent multiple edges of same type between same two nodes
+    const existingEdge = model.edges.find(
+      e => e.from === sourceId && e.to === targetId
+    );
+    if (existingEdge) return false;
+    return (
+      (sourceNode.type === 'action' || sourceNode.type === 'block') &&
+      (targetNode.type === 'action' || targetNode.type === 'block')
+    );
   },
 
   addNode: (node) => {

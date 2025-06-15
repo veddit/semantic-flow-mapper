@@ -1,11 +1,12 @@
 
 import React from 'react';
-import { BlockNode } from './BlockNode';
 import { NodeResizer } from '@xyflow/react';
+import { BlockNode } from './BlockNode';
 
 export const ResizableBlockNode = (props: any) => (
-  <div>
+  <div className="relative w-full h-full">
     <NodeResizer minWidth={180} minHeight={80} />
+    {/* Only BlockNode, avoid extra containers */}
     <BlockNode {...props} />
   </div>
 );
