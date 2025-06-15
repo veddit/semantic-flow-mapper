@@ -11,7 +11,6 @@ import {
   Node,
   NodeTypes,
   MarkerType,
-  OnNodeDrag,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -120,47 +119,53 @@ export const DiagramCanvas: React.FC = () => {
     [connectionState, startConnection, completeConnection, cancelConnection, setSelectedNode, canConnect]
   );
 
-  const onNodeDragStop: OnNodeDrag = useCallback(
-    (event, node, nodes) => {
-      // Check if an action was dropped on a block
-      if (node.type === 'action') {
-        const actionNode = model.nodes.find(n => n.id === node.id);
-        if (!actionNode || actionNode.type !== 'action') return;
+  const onNodeDragStop = useCallback(
+    (event: any, draggedNode: Node) => {
+      console.log('Node drag stopped:', draggedNode.id, draggedNode.type, draggedNode.position);
+      
+      // Only handle action nodes being dragged
+      if (draggedNode.type !== 'action') return;
 
-        // Find overlapping blocks
-        const blockNodes = nodes.filter(n => n.type === 'block' && n.id !== node.id);
+      const actionNode = model.nodes.find(n => n.id === draggedNode.id);
+      if (!actionNode || actionNode.type !== 'action') return;
+
+      // Find all block nodes
+      const blockNodes = nodes.filter(n => n.type === 'block' && n.id !== draggedNode.id);
+      
+      console.log('Found block nodes:', blockNodes.length);
+      
+      for (const blockNode of blockNodes) {
+        console.log('Checking overlap with block:', blockNode.id, blockNode.position);
         
-        for (const blockNode of blockNodes) {
-          const actionBounds = {
-            left: node.position.x,
-            right: node.position.x + (node.width || 200),
-            top: node.position.y,
-            bottom: node.position.y + (node.height || 80),
-          };
-          
-          const blockBounds = {
-            left: blockNode.position.x,
-            right: blockNode.position.x + (blockNode.width || 300),
-            top: blockNode.position.y,
-            bottom: blockNode.position.y + (blockNode.height || 120),
-          };
+        // Calculate bounds more accurately
+        const actionLeft = draggedNode.position.x;
+        const actionRight = draggedNode.position.x + (draggedNode.style?.width as number || 180);
+        const actionTop = draggedNode.position.y;
+        const actionBottom = draggedNode.position.y + (draggedNode.style?.height as number || 70);
+        
+        const blockLeft = blockNode.position.x;
+        const blockRight = blockNode.position.x + (blockNode.style?.width as number || 300);
+        const blockTop = blockNode.position.y;
+        const blockBottom = blockNode.position.y + (blockNode.style?.height as number || 120);
 
-          // Check for overlap
-          const isOverlapping = !(
-            actionBounds.right < blockBounds.left ||
-            actionBounds.left > blockBounds.right ||
-            actionBounds.bottom < blockBounds.top ||
-            actionBounds.top > blockBounds.bottom
-          );
+        console.log('Action bounds:', { left: actionLeft, right: actionRight, top: actionTop, bottom: actionBottom });
+        console.log('Block bounds:', { left: blockLeft, right: blockRight, top: blockTop, bottom: blockBottom });
 
-          if (isOverlapping) {
-            nestActionInBlock(node.id, blockNode.id);
-            break;
-          }
+        // Check for overlap - action must be significantly inside the block
+        const overlapX = actionLeft > blockLeft + 20 && actionRight < blockRight - 20;
+        const overlapY = actionTop > blockTop + 20 && actionBottom < blockBottom - 20;
+        const isOverlapping = overlapX && overlapY;
+
+        console.log('Overlap check:', { overlapX, overlapY, isOverlapping });
+
+        if (isOverlapping) {
+          console.log('Nesting action', draggedNode.id, 'in block', blockNode.id);
+          nestActionInBlock(draggedNode.id, blockNode.id);
+          break;
         }
       }
     },
-    [model.nodes, nestActionInBlock]
+    [model.nodes, nestActionInBlock, nodes]
   );
 
   const onNodeMouseEnter = useCallback(
@@ -216,7 +221,7 @@ export const DiagramCanvas: React.FC = () => {
         fitView
         className="bg-gray-50"
         nodesDraggable={!connectionState.isConnecting}
-        nodesConnectable={false} // Disable default connection behavior
+        nodesConnectable={false}
         elementsSelectable={!connectionState.isConnecting}
       >
         <Background color="#e5e7eb" gap={20} />

@@ -1,4 +1,3 @@
-
 import { create } from 'zustand';
 import { DiagramModel, DiagramNode, DiagramEdge, ValidationError } from '../types/diagram';
 
@@ -71,27 +70,37 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
   },
 
   nestActionInBlock: (actionId, blockId) => {
-    set((state) => ({
-      model: {
-        ...state.model,
-        nodes: state.model.nodes.map(node => {
-          if (node.id === actionId && node.type === 'action') {
-            return { ...node, parentBlock: blockId };
-          }
-          if (node.id === blockId && node.type === 'block') {
-            const currentChildActions = 'childActions' in node ? node.childActions : [];
-            return { 
-              ...node, 
-              childActions: currentChildActions.includes(actionId) 
-                ? currentChildActions 
-                : [...currentChildActions, actionId],
-              expanded: true
-            };
-          }
-          return node;
-        })
-      }
-    }));
+    console.log('nestActionInBlock called:', { actionId, blockId });
+    
+    set((state) => {
+      const newNodes = state.model.nodes.map(node => {
+        if (node.id === actionId && node.type === 'action') {
+          console.log('Updating action:', actionId, 'to have parent:', blockId);
+          return { ...node, parentBlock: blockId };
+        }
+        if (node.id === blockId && node.type === 'block') {
+          const currentChildActions = 'childActions' in node ? node.childActions : [];
+          const updatedChildActions = currentChildActions.includes(actionId) 
+            ? currentChildActions 
+            : [...currentChildActions, actionId];
+          console.log('Updating block:', blockId, 'childActions:', updatedChildActions);
+          return { 
+            ...node, 
+            childActions: updatedChildActions,
+            expanded: true
+          };
+        }
+        return node;
+      });
+      
+      return {
+        model: {
+          ...state.model,
+          nodes: newNodes
+        }
+      };
+    });
+    
     get().validateModel();
   },
 
