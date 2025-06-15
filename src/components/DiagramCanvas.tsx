@@ -7,12 +7,11 @@ import {
   MiniMap,
   useNodesState,
   useEdgesState,
-  Connection,
   Edge,
   Node,
   NodeTypes,
   MarkerType,
-  NodeDragHandler,
+  OnNodeDrag,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -121,7 +120,7 @@ export const DiagramCanvas: React.FC = () => {
     [connectionState, startConnection, completeConnection, cancelConnection, setSelectedNode, canConnect]
   );
 
-  const onNodeDragStop: NodeDragHandler = useCallback(
+  const onNodeDragStop: OnNodeDrag = useCallback(
     (event, node, nodes) => {
       // Check if an action was dropped on a block
       if (node.type === 'action') {

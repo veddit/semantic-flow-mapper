@@ -87,7 +87,7 @@ export const Toolbar: React.FC = () => {
     }
     if (nodeType === 'action') {
       return [
-        { value: '', label: 'No parent (orphaned)' },
+        { value: 'no-parent', label: 'No parent (orphaned)' },
         ...blocks.map(block => ({ value: block.id, label: block.label }))
       ];
     }
@@ -132,7 +132,7 @@ export const Toolbar: React.FC = () => {
             {(nodeType === 'block' || nodeType === 'action') && (
               <div>
                 <Label htmlFor="parent">Parent {nodeType === 'block' ? 'Phase' : 'Block'}</Label>
-                <Select value={parentId} onValueChange={setParentId}>
+                <Select value={parentId} onValueChange={(value) => setParentId(value === 'no-parent' ? '' : value)}>
                   <SelectTrigger>
                     <SelectValue placeholder={`Select parent ${nodeType === 'block' ? 'phase' : 'block (optional)'}`} />
                   </SelectTrigger>
