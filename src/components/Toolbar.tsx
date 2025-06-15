@@ -9,7 +9,15 @@ import { useDiagramStore } from '../store/diagramStore';
 import { DiagramNode, Phase, Block, Action, Decision } from '../types/diagram';
 
 export const Toolbar: React.FC = () => {
-  const { addNode, generateId, model, exportJSON } = useDiagramStore();
+  const { 
+    addNode, 
+    generateId, 
+    model, 
+    exportJSON, 
+    connectionState, 
+    startConnection, 
+    cancelConnection 
+  } = useDiagramStore();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [nodeType, setNodeType] = useState<'phase' | 'block' | 'action' | 'decision'>('phase');
   const [label, setLabel] = useState('');
@@ -164,6 +172,14 @@ export const Toolbar: React.FC = () => {
         </DialogContent>
       </Dialog>
 
+      <Button 
+        onClick={connectionState.isConnecting ? cancelConnection : () => {}}
+        variant={connectionState.isConnecting ? "destructive" : "outline"}
+        disabled={model.nodes.length < 2}
+      >
+        {connectionState.isConnecting ? 'Cancel Connect' : 'Connect Mode'}
+      </Button>
+
       <Button onClick={handleExport} variant="outline">
         Export JSON
       </Button>
@@ -172,6 +188,12 @@ export const Toolbar: React.FC = () => {
         <span>Nodes: {model.nodes.length}</span>
         <span>•</span>
         <span>Edges: {model.edges.length}</span>
+        {connectionState.isConnecting && (
+          <>
+            <span>•</span>
+            <span className="text-blue-600 font-medium">Connecting...</span>
+          </>
+        )}
       </div>
     </div>
   );

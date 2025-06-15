@@ -7,7 +7,6 @@ import {
   MiniMap,
   useNodesState,
   useEdgesState,
-  addEdge,
   Connection,
   Edge,
   Node,
@@ -31,7 +30,17 @@ const nodeTypes: NodeTypes = {
 };
 
 export const DiagramCanvas: React.FC = () => {
-  const { model, addEdge: addDiagramEdge, generateId, selectedNodeId, setSelectedNode } = useDiagramStore();
+  const { 
+    model, 
+    selectedNodeId, 
+    setSelectedNode, 
+    connectionState, 
+    startConnection, 
+    completeConnection, 
+    cancelConnection, 
+    setHoveredNode, 
+    canConnect 
+  } = useDiagramStore();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
@@ -39,17 +48,34 @@ export const DiagramCanvas: React.FC = () => {
   useEffect(() => {
     const layout = calculateLayout(model);
     
-    const flowNodes: Node[] = layout.nodes.map(node => ({
-      id: node.id,
-      type: node.type,
-      position: node.position,
-      data: node,
-      selected: node.id === selectedNodeId,
-      style: {
-        width: node.width,
-        height: node.height,
-      },
-    }));
+    const flowNodes: Node[] = layout.nodes.map(node => {
+      const isSource = connectionState.sourceNodeId === node.id;
+      const isHovered = connectionState.hoveredNodeId === node.id;
+      const isValidTarget = connectionState.isConnecting && 
+        connectionState.sourceNodeId && 
+        canConnect(connectionState.sourceNodeId, node.id);
+      
+      return {
+        id: node.id,
+        type: node.type,
+        position: node.position,
+        data: {
+          ...node,
+          isConnecting: connectionState.isConnecting,
+          isSource,
+          isHovered,
+          isValidTarget,
+        },
+        selected: node.id === selectedNodeId,
+        style: {
+          width: node.width,
+          height: node.height,
+          opacity: connectionState.isConnecting && !isSource && !isValidTarget ? 0.3 : 1,
+          border: isValidTarget ? '3px solid #10b981' : isSource ? '3px solid #3b82f6' : undefined,
+          boxShadow: isHovered && isValidTarget ? '0 0 20px rgba(16, 185, 129, 0.6)' : undefined,
+        },
+      };
+    });
 
     const flowEdges: Edge[] = layout.edges.map(edge => ({
       id: edge.id,
@@ -71,42 +97,84 @@ export const DiagramCanvas: React.FC = () => {
 
     setNodes(flowNodes);
     setEdges(flowEdges);
-  }, [model, selectedNodeId, setNodes, setEdges]);
-
-  const onConnect = useCallback(
-    (params: Connection) => {
-      if (params.source && params.target) {
-        const newEdge = {
-          id: generateId('edge'),
-          from: params.source,
-          to: params.target,
-          type: 'any' as const, // Default edge type
-        };
-        addDiagramEdge(newEdge);
-      }
-    },
-    [addDiagramEdge, generateId]
-  );
+  }, [model, selectedNodeId, connectionState, setNodes, setEdges, canConnect]);
 
   const onNodeClick = useCallback(
     (event: React.MouseEvent, node: Node) => {
-      setSelectedNode(node.id);
+      if (connectionState.isConnecting) {
+        if (connectionState.sourceNodeId === node.id) {
+          // Clicking source node again cancels connection
+          cancelConnection();
+        } else if (canConnect(connectionState.sourceNodeId!, node.id)) {
+          // Complete connection to valid target
+          completeConnection(node.id);
+        }
+      } else {
+        // Normal selection or start connection
+        if (event.detail === 2) { // Double-click to start connection
+          startConnection(node.id);
+        } else {
+          setSelectedNode(node.id);
+        }
+      }
     },
-    [setSelectedNode]
+    [connectionState, startConnection, completeConnection, cancelConnection, setSelectedNode, canConnect]
+  );
+
+  const onNodeMouseEnter = useCallback(
+    (event: React.MouseEvent, node: Node) => {
+      if (connectionState.isConnecting) {
+        setHoveredNode(node.id);
+      }
+    },
+    [connectionState.isConnecting, setHoveredNode]
+  );
+
+  const onNodeMouseLeave = useCallback(
+    () => {
+      if (connectionState.isConnecting) {
+        setHoveredNode(null);
+      }
+    },
+    [connectionState.isConnecting, setHoveredNode]
+  );
+
+  const onPaneClick = useCallback(
+    () => {
+      if (connectionState.isConnecting) {
+        cancelConnection();
+      } else {
+        setSelectedNode(null);
+      }
+    },
+    [connectionState.isConnecting, cancelConnection, setSelectedNode]
   );
 
   return (
     <div className="w-full h-full">
+      {connectionState.isConnecting && (
+        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg">
+          <p className="text-sm font-medium">
+            Click a highlighted node to connect, or click anywhere to cancel
+          </p>
+        </div>
+      )}
+      
       <ReactFlow
         nodes={nodes}
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
         onNodeClick={onNodeClick}
+        onNodeMouseEnter={onNodeMouseEnter}
+        onNodeMouseLeave={onNodeMouseLeave}
+        onPaneClick={onPaneClick}
         nodeTypes={nodeTypes}
         fitView
         className="bg-gray-50"
+        nodesDraggable={!connectionState.isConnecting}
+        nodesConnectable={false} // Disable default connection behavior
+        elementsSelectable={!connectionState.isConnecting}
       >
         <Background color="#e5e7eb" gap={20} />
         <Controls />

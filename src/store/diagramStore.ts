@@ -1,12 +1,18 @@
-
 import { create } from 'zustand';
 import { DiagramModel, DiagramNode, DiagramEdge, ValidationError } from '../types/diagram';
+
+interface ConnectionState {
+  isConnecting: boolean;
+  sourceNodeId: string | null;
+  hoveredNodeId: string | null;
+}
 
 interface DiagramStore {
   model: DiagramModel;
   selectedNodeId: string | null;
   selectedEdgeId: string | null;
   validationErrors: ValidationError[];
+  connectionState: ConnectionState;
   
   // Node operations
   addNode: (node: DiagramNode) => void;
@@ -17,6 +23,13 @@ interface DiagramStore {
   addEdge: (edge: DiagramEdge) => void;
   updateEdge: (id: string, updates: Partial<DiagramEdge>) => void;
   deleteEdge: (id: string) => void;
+  
+  // Connection operations
+  startConnection: (nodeId: string) => void;
+  completeConnection: (targetNodeId: string, edgeType?: 'choice' | 'any' | 'parallel') => void;
+  cancelConnection: () => void;
+  setHoveredNode: (nodeId: string | null) => void;
+  canConnect: (sourceId: string, targetId: string) => boolean;
   
   // Selection
   setSelectedNode: (id: string | null) => void;
@@ -39,12 +52,88 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
   selectedNodeId: null,
   selectedEdgeId: null,
   validationErrors: [],
+  connectionState: {
+    isConnecting: false,
+    sourceNodeId: null,
+    hoveredNodeId: null,
+  },
 
   generateId: (type: string) => {
     const prefix = type.charAt(0);
     const timestamp = Date.now().toString(36);
     const random = Math.random().toString(36).substr(2, 3);
     return `${prefix}${timestamp}${random}`;
+  },
+
+  startConnection: (nodeId) => {
+    set({
+      connectionState: {
+        isConnecting: true,
+        sourceNodeId: nodeId,
+        hoveredNodeId: null,
+      }
+    });
+  },
+
+  completeConnection: (targetNodeId, edgeType = 'any') => {
+    const { connectionState, addEdge, generateId, canConnect } = get();
+    
+    if (!connectionState.sourceNodeId || !canConnect(connectionState.sourceNodeId, targetNodeId)) {
+      get().cancelConnection();
+      return;
+    }
+
+    const newEdge: DiagramEdge = {
+      id: generateId('edge'),
+      from: connectionState.sourceNodeId,
+      to: targetNodeId,
+      type: edgeType,
+    };
+
+    addEdge(newEdge);
+    get().cancelConnection();
+  },
+
+  cancelConnection: () => {
+    set({
+      connectionState: {
+        isConnecting: false,
+        sourceNodeId: null,
+        hoveredNodeId: null,
+      }
+    });
+  },
+
+  setHoveredNode: (nodeId) => {
+    set((state) => ({
+      connectionState: {
+        ...state.connectionState,
+        hoveredNodeId: nodeId,
+      }
+    }));
+  },
+
+  canConnect: (sourceId, targetId) => {
+    const { model } = get();
+    const sourceNode = model.nodes.find(n => n.id === sourceId);
+    const targetNode = model.nodes.find(n => n.id === targetId);
+    
+    if (!sourceNode || !targetNode || sourceId === targetId) return false;
+
+    // Same level connections (action -> action, block -> block)
+    if (sourceNode.type === targetNode.type) return true;
+
+    // Cross-block connections (action in one block -> action in another block)
+    if (sourceNode.type === 'action' && targetNode.type === 'action') {
+      const sourceParent = 'parentBlock' in sourceNode ? sourceNode.parentBlock : null;
+      const targetParent = 'parentBlock' in targetNode ? targetNode.parentBlock : null;
+      return sourceParent !== targetParent;
+    }
+
+    // Block to block connections
+    if (sourceNode.type === 'block' && targetNode.type === 'block') return true;
+
+    return false;
   },
 
   addNode: (node) => {
