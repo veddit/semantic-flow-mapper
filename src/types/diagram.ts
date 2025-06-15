@@ -1,5 +1,5 @@
 
-export type NodeType = 'phase' | 'block' | 'action' | 'decision';
+export type NodeType = 'phase' | 'block' | 'action';
 
 export type EdgeType = 'choice' | 'any' | 'parallel';
 
@@ -14,30 +14,27 @@ export interface Block {
   label: string;
   type: 'block';
   parentPhase: string;
+  childActions: string[];
+  expanded: boolean;
 }
 
 export interface Action {
   id: string;
   label: string;
   type: 'action';
-  parentBlock: string;
+  parentBlock: string | null;
   performedBy: string[];
+  position?: { x: number; y: number };
 }
 
-export interface Decision {
-  id: string;
-  label: string;
-  type: 'decision';
-  parentBlock: string;
-}
-
-export type DiagramNode = Phase | Block | Action | Decision;
+export type DiagramNode = Phase | Block | Action;
 
 export interface DiagramEdge {
   id: string;
   from: string;
   to: string;
   type: EdgeType;
+  descriptor?: string;
 }
 
 export interface DiagramModel {

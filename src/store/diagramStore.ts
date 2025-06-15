@@ -1,3 +1,4 @@
+
 import { create } from 'zustand';
 import { DiagramModel, DiagramNode, DiagramEdge, ValidationError } from '../types/diagram';
 
@@ -24,9 +25,13 @@ interface DiagramStore {
   updateEdge: (id: string, updates: Partial<DiagramEdge>) => void;
   deleteEdge: (id: string) => void;
   
+  // Nesting operations
+  nestActionInBlock: (actionId: string, blockId: string) => void;
+  removeActionFromBlock: (actionId: string) => void;
+  
   // Connection operations
   startConnection: (nodeId: string) => void;
-  completeConnection: (targetNodeId: string, edgeType?: 'choice' | 'any' | 'parallel') => void;
+  completeConnection: (targetNodeId: string, edgeType?: 'choice' | 'any' | 'parallel', descriptor?: string) => void;
   cancelConnection: () => void;
   setHoveredNode: (nodeId: string | null) => void;
   canConnect: (sourceId: string, targetId: string) => boolean;
@@ -65,6 +70,52 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
     return `${prefix}${timestamp}${random}`;
   },
 
+  nestActionInBlock: (actionId, blockId) => {
+    set((state) => ({
+      model: {
+        ...state.model,
+        nodes: state.model.nodes.map(node => {
+          if (node.id === actionId && node.type === 'action') {
+            return { ...node, parentBlock: blockId };
+          }
+          if (node.id === blockId && node.type === 'block') {
+            const currentChildActions = 'childActions' in node ? node.childActions : [];
+            return { 
+              ...node, 
+              childActions: currentChildActions.includes(actionId) 
+                ? currentChildActions 
+                : [...currentChildActions, actionId],
+              expanded: true
+            };
+          }
+          return node;
+        })
+      }
+    }));
+    get().validateModel();
+  },
+
+  removeActionFromBlock: (actionId) => {
+    set((state) => ({
+      model: {
+        ...state.model,
+        nodes: state.model.nodes.map(node => {
+          if (node.id === actionId && node.type === 'action') {
+            return { ...node, parentBlock: null };
+          }
+          if (node.type === 'block' && 'childActions' in node) {
+            return { 
+              ...node, 
+              childActions: node.childActions.filter(id => id !== actionId)
+            };
+          }
+          return node;
+        })
+      }
+    }));
+    get().validateModel();
+  },
+
   startConnection: (nodeId) => {
     set({
       connectionState: {
@@ -75,7 +126,7 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
     });
   },
 
-  completeConnection: (targetNodeId, edgeType = 'any') => {
+  completeConnection: (targetNodeId, edgeType = 'any', descriptor) => {
     const { connectionState, addEdge, generateId, canConnect } = get();
     
     if (!connectionState.sourceNodeId || !canConnect(connectionState.sourceNodeId, targetNodeId)) {
@@ -88,6 +139,7 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
       from: connectionState.sourceNodeId,
       to: targetNodeId,
       type: edgeType,
+      descriptor,
     };
 
     addEdge(newEdge);
@@ -120,20 +172,9 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
     
     if (!sourceNode || !targetNode || sourceId === targetId) return false;
 
-    // Same level connections (action -> action, block -> block)
-    if (sourceNode.type === targetNode.type) return true;
-
-    // Cross-block connections (action in one block -> action in another block)
-    if (sourceNode.type === 'action' && targetNode.type === 'action') {
-      const sourceParent = 'parentBlock' in sourceNode ? sourceNode.parentBlock : null;
-      const targetParent = 'parentBlock' in targetNode ? targetNode.parentBlock : null;
-      return sourceParent !== targetParent;
-    }
-
-    // Block to block connections
-    if (sourceNode.type === 'block' && targetNode.type === 'block') return true;
-
-    return false;
+    // Actions and blocks can connect to other actions and blocks
+    return (sourceNode.type === 'action' || sourceNode.type === 'block') && 
+           (targetNode.type === 'action' || targetNode.type === 'block');
   },
 
   addNode: (node) => {
@@ -235,8 +276,7 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
     const blocks = model.nodes.filter(n => n.type === 'block');
     blocks.forEach(block => {
       const actions = model.nodes.filter(n => 
-        (n.type === 'action' || n.type === 'decision') && 
-        'parentBlock' in n && n.parentBlock === block.id
+        n.type === 'action' && 'parentBlock' in n && n.parentBlock === block.id
       );
       if (actions.length === 0) {
         errors.push({
@@ -247,28 +287,16 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
       }
     });
 
-    // Check orphaned nodes
-    model.nodes.forEach(node => {
-      if (node.type === 'block' && 'parentPhase' in node) {
-        const parentExists = model.nodes.some(n => n.id === node.parentPhase);
-        if (!parentExists) {
-          errors.push({
-            type: 'orphaned_node',
-            message: `Block "${node.label}" has missing parent phase`,
-            nodeId: node.id
-          });
-        }
-      }
-      if ((node.type === 'action' || node.type === 'decision') && 'parentBlock' in node) {
-        const parentExists = model.nodes.some(n => n.id === node.parentBlock);
-        if (!parentExists) {
-          errors.push({
-            type: 'orphaned_node',
-            message: `${node.type} "${node.label}" has missing parent block`,
-            nodeId: node.id
-          });
-        }
-      }
+    // Check for orphaned actions
+    const orphanedActions = model.nodes.filter(n => 
+      n.type === 'action' && 'parentBlock' in n && !n.parentBlock
+    );
+    orphanedActions.forEach(action => {
+      errors.push({
+        type: 'orphaned_action',
+        message: `Action "${action.label}" needs to be placed in a block`,
+        nodeId: action.id
+      });
     });
 
     set({ validationErrors: errors });

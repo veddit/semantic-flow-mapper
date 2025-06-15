@@ -12,6 +12,7 @@ import {
   Node,
   NodeTypes,
   MarkerType,
+  NodeDragHandler,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -20,13 +21,11 @@ import { calculateLayout } from '../utils/layoutEngine';
 import { PhaseNode } from './nodes/PhaseNode';
 import { BlockNode } from './nodes/BlockNode';
 import { ActionNode } from './nodes/ActionNode';
-import { DecisionNode } from './nodes/DecisionNode';
 
 const nodeTypes: NodeTypes = {
   phase: PhaseNode,
   block: BlockNode,
   action: ActionNode,
-  decision: DecisionNode,
 };
 
 export const DiagramCanvas: React.FC = () => {
@@ -39,7 +38,8 @@ export const DiagramCanvas: React.FC = () => {
     completeConnection, 
     cancelConnection, 
     setHoveredNode, 
-    canConnect 
+    canConnect,
+    nestActionInBlock
   } = useDiagramStore();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -91,7 +91,7 @@ export const DiagramCanvas: React.FC = () => {
         type: MarkerType.ArrowClosed,
         color: edge.type === 'choice' ? '#ef4444' : edge.type === 'parallel' ? '#8b5cf6' : '#6b7280',
       },
-      label: edge.type,
+      label: edge.descriptor || edge.type,
       labelStyle: { fontSize: 12, fontWeight: 'bold' },
     }));
 
@@ -119,6 +119,49 @@ export const DiagramCanvas: React.FC = () => {
       }
     },
     [connectionState, startConnection, completeConnection, cancelConnection, setSelectedNode, canConnect]
+  );
+
+  const onNodeDragStop: NodeDragHandler = useCallback(
+    (event, node, nodes) => {
+      // Check if an action was dropped on a block
+      if (node.type === 'action') {
+        const actionNode = model.nodes.find(n => n.id === node.id);
+        if (!actionNode || actionNode.type !== 'action') return;
+
+        // Find overlapping blocks
+        const blockNodes = nodes.filter(n => n.type === 'block' && n.id !== node.id);
+        
+        for (const blockNode of blockNodes) {
+          const actionBounds = {
+            left: node.position.x,
+            right: node.position.x + (node.width || 200),
+            top: node.position.y,
+            bottom: node.position.y + (node.height || 80),
+          };
+          
+          const blockBounds = {
+            left: blockNode.position.x,
+            right: blockNode.position.x + (blockNode.width || 300),
+            top: blockNode.position.y,
+            bottom: blockNode.position.y + (blockNode.height || 120),
+          };
+
+          // Check for overlap
+          const isOverlapping = !(
+            actionBounds.right < blockBounds.left ||
+            actionBounds.left > blockBounds.right ||
+            actionBounds.bottom < blockBounds.top ||
+            actionBounds.top > blockBounds.bottom
+          );
+
+          if (isOverlapping) {
+            nestActionInBlock(node.id, blockNode.id);
+            break;
+          }
+        }
+      }
+    },
+    [model.nodes, nestActionInBlock]
   );
 
   const onNodeMouseEnter = useCallback(
@@ -166,6 +209,7 @@ export const DiagramCanvas: React.FC = () => {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeClick={onNodeClick}
+        onNodeDragStop={onNodeDragStop}
         onNodeMouseEnter={onNodeMouseEnter}
         onNodeMouseLeave={onNodeMouseLeave}
         onPaneClick={onPaneClick}
@@ -185,7 +229,6 @@ export const DiagramCanvas: React.FC = () => {
               case 'phase': return '#3b82f6';
               case 'block': return '#10b981';
               case 'action': return '#f59e0b';
-              case 'decision': return '#8b5cf6';
               default: return '#6b7280';
             }
           }}

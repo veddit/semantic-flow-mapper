@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useDiagramStore } from '../store/diagramStore';
-import { DiagramNode, Phase, Block, Action, Decision } from '../types/diagram';
+import { DiagramNode, Phase, Block, Action } from '../types/diagram';
 
 export const Toolbar: React.FC = () => {
   const { 
@@ -19,7 +19,7 @@ export const Toolbar: React.FC = () => {
     cancelConnection 
   } = useDiagramStore();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [nodeType, setNodeType] = useState<'phase' | 'block' | 'action' | 'decision'>('phase');
+  const [nodeType, setNodeType] = useState<'phase' | 'block' | 'action'>('phase');
   const [label, setLabel] = useState('');
   const [parentId, setParentId] = useState('');
   const [performedBy, setPerformedBy] = useState('');
@@ -48,25 +48,17 @@ export const Toolbar: React.FC = () => {
           label: label.trim(),
           type: 'block',
           parentPhase: parentId,
+          childActions: [],
+          expanded: false,
         };
         break;
       case 'action':
-        if (!parentId) return;
         newNode = {
           id,
           label: label.trim(),
           type: 'action',
-          parentBlock: parentId,
+          parentBlock: parentId || null,
           performedBy: performedBy.split(',').map(s => s.trim()).filter(Boolean),
-        };
-        break;
-      case 'decision':
-        if (!parentId) return;
-        newNode = {
-          id,
-          label: label.trim(),
-          type: 'decision',
-          parentBlock: parentId,
         };
         break;
     }
@@ -93,8 +85,11 @@ export const Toolbar: React.FC = () => {
     if (nodeType === 'block') {
       return phases.map(phase => ({ value: phase.id, label: phase.label }));
     }
-    if (nodeType === 'action' || nodeType === 'decision') {
-      return blocks.map(block => ({ value: block.id, label: block.label }));
+    if (nodeType === 'action') {
+      return [
+        { value: '', label: 'No parent (orphaned)' },
+        ...blocks.map(block => ({ value: block.id, label: block.label }))
+      ];
     }
     return [];
   };
@@ -120,7 +115,6 @@ export const Toolbar: React.FC = () => {
                   <SelectItem value="phase">Phase</SelectItem>
                   <SelectItem value="block">Block</SelectItem>
                   <SelectItem value="action">Action</SelectItem>
-                  <SelectItem value="decision">Decision</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -135,12 +129,12 @@ export const Toolbar: React.FC = () => {
               />
             </div>
 
-            {(nodeType === 'block' || nodeType === 'action' || nodeType === 'decision') && (
+            {(nodeType === 'block' || nodeType === 'action') && (
               <div>
                 <Label htmlFor="parent">Parent {nodeType === 'block' ? 'Phase' : 'Block'}</Label>
                 <Select value={parentId} onValueChange={setParentId}>
                   <SelectTrigger>
-                    <SelectValue placeholder={`Select parent ${nodeType === 'block' ? 'phase' : 'block'}`} />
+                    <SelectValue placeholder={`Select parent ${nodeType === 'block' ? 'phase' : 'block (optional)'}`} />
                   </SelectTrigger>
                   <SelectContent>
                     {getParentOptions().map(option => (
@@ -165,7 +159,7 @@ export const Toolbar: React.FC = () => {
               </div>
             )}
 
-            <Button onClick={handleAddNode} disabled={!label.trim() || (nodeType !== 'phase' && !parentId)}>
+            <Button onClick={handleAddNode} disabled={!label.trim() || (nodeType === 'block' && !parentId)}>
               Add {nodeType.charAt(0).toUpperCase() + nodeType.slice(1)}
             </Button>
           </div>

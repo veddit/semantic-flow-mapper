@@ -9,7 +9,7 @@ export interface LayoutNode {
   position: { x: number; y: number };
   width: number;
   height: number;
-  [key: string]: any; // This allows additional properties from DiagramNode
+  [key: string]: any;
 }
 
 export interface LayoutEdge {
@@ -23,15 +23,17 @@ const NODE_WIDTH = 200;
 const NODE_HEIGHT = 80;
 const PHASE_WIDTH = 300;
 const PHASE_HEIGHT = 150;
-const BLOCK_WIDTH = 250;
-const BLOCK_HEIGHT = 100;
+const BLOCK_MIN_WIDTH = 300;
+const BLOCK_HEIGHT = 120;
+const ACTION_WIDTH = 180;
+const ACTION_HEIGHT = 70;
 
 export const calculateLayout = (model: DiagramModel): { nodes: LayoutNode[]; edges: LayoutEdge[] } => {
   const g = new dagre.graphlib.Graph();
   g.setGraph({ 
-    rankdir: 'TB', 
-    ranksep: 60, 
-    nodesep: 40,
+    rankdir: 'LR', // Left to right for better horizontal connector flow
+    ranksep: 80, 
+    nodesep: 60,
     marginx: 20,
     marginy: 20
   });
@@ -46,8 +48,16 @@ export const calculateLayout = (model: DiagramModel): { nodes: LayoutNode[]; edg
       width = PHASE_WIDTH;
       height = PHASE_HEIGHT;
     } else if (node.type === 'block') {
-      width = BLOCK_WIDTH;
-      height = BLOCK_HEIGHT;
+      // Calculate block width based on child actions
+      const childActions = model.nodes.filter(n => 
+        n.type === 'action' && 'parentBlock' in n && n.parentBlock === node.id
+      );
+      const actionWidth = ACTION_WIDTH;
+      width = Math.max(BLOCK_MIN_WIDTH, childActions.length * (actionWidth + 20) + 40);
+      height = 'expanded' in node && node.expanded ? BLOCK_HEIGHT + 60 : BLOCK_HEIGHT;
+    } else if (node.type === 'action') {
+      width = ACTION_WIDTH;
+      height = ACTION_HEIGHT;
     }
 
     g.setNode(node.id, { width, height });
@@ -60,8 +70,20 @@ export const calculateLayout = (model: DiagramModel): { nodes: LayoutNode[]; edg
     };
   });
 
-  // Add edges to layout
-  model.edges.forEach(edge => {
+  // Add edges to layout - only for nodes that should participate in layout
+  // Actions nested in blocks shouldn't create layout edges, only the blocks themselves
+  const layoutEdges = model.edges.filter(edge => {
+    const sourceNode = model.nodes.find(n => n.id === edge.from);
+    const targetNode = model.nodes.find(n => n.id === edge.to);
+    
+    // Only include edges between blocks and phases, or between orphaned actions
+    return sourceNode && targetNode && (
+      (sourceNode.type === 'block' || sourceNode.type === 'phase') ||
+      (sourceNode.type === 'action' && 'parentBlock' in sourceNode && !sourceNode.parentBlock)
+    );
+  });
+
+  layoutEdges.forEach(edge => {
     g.setEdge(edge.from, edge.to);
   });
 
@@ -77,12 +99,12 @@ export const calculateLayout = (model: DiagramModel): { nodes: LayoutNode[]; edg
     }
   });
 
-  const layoutEdges: LayoutEdge[] = model.edges.map(edge => ({
+  const finalEdges: LayoutEdge[] = model.edges.map(edge => ({
     id: edge.id,
     source: edge.from,
     target: edge.to,
     type: edge.type
   }));
 
-  return { nodes: layoutNodes, edges: layoutEdges };
+  return { nodes: layoutNodes, edges: finalEdges };
 };
