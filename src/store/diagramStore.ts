@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { DiagramModel, DiagramNode, DiagramEdge, ValidationError } from '../types/diagram';
+import { DiagramModel, DiagramNode, DiagramEdge, ValidationError, Block } from '../types/diagram';
 
 interface ConnectionState {
   isConnecting: boolean;
@@ -73,22 +73,27 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
     console.log('nestActionInBlock called:', { actionId, blockId });
 
     set((state) => {
-      const newNodes = state.model.nodes.map(node => {
+      // Explicit type-safe update
+      const newNodes: DiagramNode[] = state.model.nodes.map(node => {
         // If action node, update its parentBlock
         if (node.id === actionId && node.type === 'action') {
-          return { ...node, parentBlock: blockId }; // parentBlock is valid key
+          return {
+            ...node,
+            parentBlock: blockId,
+          };
         }
-        // If block node, add this action if not present
+        // If block node, add this action if not already present
         if (node.id === blockId && node.type === 'block') {
           const block = node as Block;
-          const currentChildActions = block.childActions;
+          const currentChildActions = Array.isArray(block.childActions) ? block.childActions : [];
           const updatedChildActions = currentChildActions.includes(actionId)
             ? currentChildActions
             : [...currentChildActions, actionId];
+          // Return a valid Block type object (not a union)
           return {
             ...block,
             childActions: updatedChildActions,
-            expanded: true
+            expanded: true,
           };
         }
         return node;
@@ -97,7 +102,7 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
       return {
         model: {
           ...state.model,
-          nodes: newNodes as typeof state.model.nodes // type-safe!
+          nodes: newNodes, // No type assertions needed, structure guaranteed
         }
       };
     });
