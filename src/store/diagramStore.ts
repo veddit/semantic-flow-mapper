@@ -200,11 +200,18 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
     set((state) => ({
       model: {
         ...state.model,
-        nodes: state.model.nodes.map(node => 
-          node.id === id ? { ...node, ...updates } as DiagramNode : node
-        )
-      }
+        nodes: state.model.nodes.map(node =>
+          node.id === id
+            ? {
+                ...node,
+                ...updates,
+                // Allow e.g. custom position, width, or height for free-drag/resizing
+              }
+            : node
+        ),
+      },
     }));
+    // Only validate, do not auto-layout here!
     get().validateModel();
   },
 
