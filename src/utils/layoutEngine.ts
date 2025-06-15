@@ -2,10 +2,19 @@
 import dagre from 'dagre';
 import { DiagramModel, DiagramNode } from '../types/diagram';
 
-export interface LayoutNode extends DiagramNode {
+export interface LayoutNode {
+  id: string;
+  label: string;
+  type: 'phase' | 'block' | 'action';
   position: { x: number; y: number };
   width: number;
   height: number;
+  // Include all other DiagramNode properties
+  parentPhase?: string;
+  parentBlock?: string | null;
+  childActions?: string[];
+  expanded?: boolean;
+  performedBy?: string[];
 }
 
 export interface LayoutEdge {
@@ -72,7 +81,7 @@ export const calculateLayout = (model: DiagramModel): LayoutResult => {
       },
       width: nodeWithPosition.width,
       height: nodeWithPosition.height,
-    };
+    } as LayoutNode;
   });
 
   // Map edges with descriptors
