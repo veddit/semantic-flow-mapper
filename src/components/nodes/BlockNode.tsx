@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { Block } from '../../types/diagram';
@@ -16,8 +15,13 @@ interface BlockNodeProps {
 
 export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
   const { model } = useDiagramStore();
+  // Only show childActions whose parentBlock matches this block (this prevents stale/ghost children)
   const childActions = model.nodes.filter(
-    n => n.type === 'action' && 'parentBlock' in n && n.parentBlock === data.id
+    n =>
+      n.type === 'action' &&
+      'parentBlock' in n &&
+      n.parentBlock === data.id &&
+      data.childActions.includes(n.id)
   );
 
   const minWidth = 300;

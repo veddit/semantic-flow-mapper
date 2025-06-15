@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Handle, Position } from '@xyflow/react';
 import { Action } from '../../types/diagram';
@@ -15,7 +14,10 @@ interface ActionNodeProps {
 
 export const ActionNode: React.FC<ActionNodeProps> = ({ data, selected }) => {
   const isOrphaned = !data.parentBlock;
-  
+
+  // This ActionNode should never render in a block container unless it is the true child
+  // Rendering logic is otherwise unchanged
+
   return (
     <div className={`
       border-2 rounded-lg p-3 min-w-[180px] min-h-[70px]
@@ -39,7 +41,6 @@ export const ActionNode: React.FC<ActionNodeProps> = ({ data, selected }) => {
         </div>
       )}
 
-      {/* Only allow target+source handles */}
       <Handle type="target" position={Position.Left} className="w-3 h-3" />
       <Handle type="source" position={Position.Right} className="w-3 h-3" />
     </div>

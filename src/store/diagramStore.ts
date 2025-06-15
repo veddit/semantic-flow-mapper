@@ -56,25 +56,41 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
   },
 
   nestActionInBlock: (actionId, destBlockId) => {
-    set(state => {
-      // Remove actionId from ALL parent blocks, add only to chosen one
-      const newNodes: DiagramNode[] = state.model.nodes.map(node => {
+    set((state) => {
+      let newNodes = state.model.nodes.map(node => {
+        // Remove from all previous blocks' childActions arrays
         if (node.type === 'block') {
-          let newChildActions = node.childActions.filter(id => id !== actionId);
-          if (node.id === destBlockId && !newChildActions.includes(actionId)) {
-            newChildActions = [...newChildActions, actionId];
-          }
           return {
             ...node,
-            childActions: newChildActions,
-            expanded: node.id === destBlockId ? true : node.expanded,
+            childActions: node.childActions.filter(id => id !== actionId)
           };
         }
-        if (node.id === actionId && node.type === 'action') {
+        return node;
+      });
+
+      // Add to destBlock's childActions
+      newNodes = newNodes.map(node => {
+        if (node.type === 'block' && node.id === destBlockId) {
+          // Only add if not already present
+          if (!node.childActions.includes(actionId)) {
+            return {
+              ...node,
+              childActions: [...node.childActions, actionId],
+              expanded: true,
+            };
+          }
+        }
+        return node;
+      });
+
+      // Update action's parentBlock
+      newNodes = newNodes.map(node => {
+        if (node.type === 'action' && node.id === actionId) {
           return { ...node, parentBlock: destBlockId };
         }
         return node;
       });
+
       return {
         model: {
           ...state.model,
