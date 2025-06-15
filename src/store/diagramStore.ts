@@ -62,7 +62,7 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
       model: {
         ...state.model,
         nodes: state.model.nodes.map(node => 
-          node.id === id ? { ...node, ...updates } : node
+          node.id === id ? { ...node, ...updates } as DiagramNode : node
         )
       }
     }));

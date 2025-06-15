@@ -2,10 +2,14 @@
 import dagre from 'dagre';
 import { DiagramModel, DiagramNode } from '../types/diagram';
 
-export interface LayoutNode extends DiagramNode {
+export interface LayoutNode {
+  id: string;
+  type: string;
+  label: string;
   position: { x: number; y: number };
   width: number;
   height: number;
+  [key: string]: any; // This allows additional properties from DiagramNode
 }
 
 export interface LayoutEdge {
