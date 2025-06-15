@@ -1,4 +1,3 @@
-
 import React, { useCallback, useEffect, useRef } from 'react';
 import {
   ReactFlow,
@@ -50,7 +49,6 @@ export const DiagramCanvas: React.FC = () => {
 
   // Only trigger auto-layout if requested; by default, allow persistent dragging/resizing.
   useEffect(() => {
-    // For the initial mount, calculate layout so positions are filled if missing:
     if (!layoutRef.current) {
       const layout = calculateLayout(model);
       layoutRef.current = layout;
@@ -83,7 +81,6 @@ export const DiagramCanvas: React.FC = () => {
         labelStyle: { fontSize: 12, fontWeight: 'bold' },
       })));
     } else {
-      // Just update selection status, node sizes, etc based on current store state
       setNodes(nds =>
         nds.map(n => ({
           ...n,
@@ -102,7 +99,7 @@ export const DiagramCanvas: React.FC = () => {
     }
   }, [model.nodes, model.edges, selectedNodeId, setNodes, setEdges, connectionState.isConnecting, connectionState.sourceNodeId]);
 
-  // Modern edit/connector mode: select a node and "apply" action on next click
+  // Modern edit/connector mode (same as before except...)
   const onNodeClick = useCallback(
     (event: React.MouseEvent, node: Node) => {
       if (!connectionState.isConnecting) {
@@ -138,18 +135,15 @@ export const DiagramCanvas: React.FC = () => {
     [connectionState, setSelectedNode, startConnection, canConnect, completeConnection, cancelConnection, nestActionInBlock, model.nodes]
   );
 
-  // Enable persistent dragging and resizing of node position/dimensions.
+  // Only persist drag, not width/height, since width/height is not a DiagramNode property.
   const onNodesChangeWrapper = useCallback(
     (changes: NodeChange[]) => {
       onNodesChange(changes);
       changes.forEach(change => {
         if (change.type === 'position' && change.position) {
-          // Update node persistent position in store
           updateNode(change.id, { position: change.position });
         }
-        if (change.type === 'dimensions' && change.dimensions) {
-          updateNode(change.id, { width: change.dimensions.width, height: change.dimensions.height });
-        }
+        // Removed any attempt to updateNode(..., { width, height }), as those are visual only.
       });
     },
     [onNodesChange, updateNode]

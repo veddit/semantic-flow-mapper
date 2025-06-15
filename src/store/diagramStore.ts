@@ -71,36 +71,36 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
 
   nestActionInBlock: (actionId, blockId) => {
     console.log('nestActionInBlock called:', { actionId, blockId });
-    
+
     set((state) => {
       const newNodes = state.model.nodes.map(node => {
+        // If action node, update its parentBlock
         if (node.id === actionId && node.type === 'action') {
-          console.log('Updating action:', actionId, 'to have parent:', blockId);
-          return { ...node, parentBlock: blockId };
+          return { ...node, parentBlock: blockId }; // parentBlock is valid key
         }
+        // If block node, add this action if not present
         if (node.id === blockId && node.type === 'block') {
-          const currentChildActions = 'childActions' in node ? node.childActions : [];
-          const updatedChildActions = currentChildActions.includes(actionId) 
-            ? currentChildActions 
+          const block = node as Block;
+          const currentChildActions = block.childActions;
+          const updatedChildActions = currentChildActions.includes(actionId)
+            ? currentChildActions
             : [...currentChildActions, actionId];
-          console.log('Updating block:', blockId, 'childActions:', updatedChildActions);
-          return { 
-            ...node, 
+          return {
+            ...block,
             childActions: updatedChildActions,
             expanded: true
           };
         }
         return node;
       });
-      
+
       return {
         model: {
           ...state.model,
-          nodes: newNodes
+          nodes: newNodes as typeof state.model.nodes // type-safe!
         }
       };
     });
-    
     get().validateModel();
   },
 
