@@ -16,25 +16,27 @@ interface BlockNodeProps {
 
 export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
   const { model } = useDiagramStore();
-  const childActions = model.nodes.filter(n => 
-    n.type === 'action' && 'parentBlock' in n && n.parentBlock === data.id
+  const childActions = model.nodes.filter(
+    n => n.type === 'action' && 'parentBlock' in n && n.parentBlock === data.id
   );
 
   const minWidth = 300;
   const actionWidth = 150;
-  const expandedWidth = Math.max(minWidth, childActions.length * (actionWidth + 20) + 40);
+  const expandedWidth = Math.max(
+    minWidth,
+    childActions.length * (actionWidth + 20) + 40
+  );
 
   return (
-    <div 
+    <div
       className={`
         border-2 rounded-lg p-4 bg-green-50 relative
         ${selected ? 'border-green-600 shadow-lg' : 'border-green-300'}
         ${data.isValidTarget ? 'border-green-500 shadow-green-200 shadow-lg' : ''}
       `}
-      style={{ 
+      style={{
         width: expandedWidth,
         minHeight: data.expanded ? 120 : 80,
-        transition: 'all 0.2s ease-in-out'
       }}
     >
       <div className="flex items-center gap-2 mb-2">
@@ -42,11 +44,11 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
         <span className="font-semibold text-green-800">Block</span>
       </div>
       <h4 className="text-md font-medium text-gray-900 mb-2">{data.label}</h4>
-      
+
       {data.expanded && childActions.length > 0 && (
         <div className="flex gap-3 mt-3 min-h-[60px] items-center">
           {childActions.map((action, index) => (
-            <div 
+            <div
               key={action.id}
               className="bg-yellow-100 border border-yellow-300 rounded p-2 text-xs flex-shrink-0"
               style={{ width: actionWidth }}
@@ -61,7 +63,8 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data, selected }) => {
           ))}
         </div>
       )}
-      
+
+      {/* Allow connections: left is target, right is source */}
       <Handle type="target" position={Position.Left} className="w-3 h-3" />
       <Handle type="source" position={Position.Right} className="w-3 h-3" />
     </div>

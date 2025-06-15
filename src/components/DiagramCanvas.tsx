@@ -48,38 +48,52 @@ export const DiagramCanvas: React.FC = () => {
   const layoutRef = useRef<any>(null);
 
   // Only trigger auto-layout if requested; by default, allow persistent dragging/resizing.
-  useEffect(() => {
+  React.useEffect(() => {
     if (!layoutRef.current) {
       const layout = calculateLayout(model);
       layoutRef.current = layout;
-      setNodes(layout.nodes.map(node => ({
-        id: node.id,
-        type: node.type,
-        position: node.position,
-        data: { ...node },
-        style: {
-          width: node.width,
-          height: node.height,
-        },
-        selected: node.id === selectedNodeId,
-      })));
-      setEdges(layout.edges.map(edge => ({
-        id: edge.id,
-        source: edge.source,
-        target: edge.target,
-        type: 'smoothstep',
-        animated: edge.type === 'parallel',
-        style: {
-          stroke: edge.type === 'choice' ? '#ef4444' : edge.type === 'parallel' ? '#8b5cf6' : '#6b7280',
-          strokeWidth: 2,
-        },
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-          color: edge.type === 'choice' ? '#ef4444' : edge.type === 'parallel' ? '#8b5cf6' : '#6b7280',
-        },
-        label: edge.descriptor || edge.type,
-        labelStyle: { fontSize: 12, fontWeight: 'bold' },
-      })));
+      setNodes(
+        layout.nodes.map(node => ({
+          id: node.id,
+          type: node.type,
+          position: node.position,
+          data: { ...node },
+          style: {
+            width: node.width,
+            height: node.height,
+          },
+          selected: node.id === selectedNodeId,
+        }))
+      );
+      setEdges(
+        layout.edges.map(edge => ({
+          id: edge.id,
+          source: edge.source,
+          target: edge.target,
+          type: 'smoothstep',
+          animated: edge.type === 'parallel',
+          style: {
+            stroke:
+              edge.type === 'choice'
+                ? '#ef4444'
+                : edge.type === 'parallel'
+                ? '#8b5cf6'
+                : '#6b7280',
+            strokeWidth: 2,
+          },
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            color:
+              edge.type === 'choice'
+                ? '#ef4444'
+                : edge.type === 'parallel'
+                ? '#8b5cf6'
+                : '#6b7280',
+          },
+          label: edge.descriptor || edge.type,
+          labelStyle: { fontSize: 12, fontWeight: 'bold' },
+        }))
+      );
     } else {
       setNodes(nds =>
         nds.map(n => ({
@@ -87,52 +101,71 @@ export const DiagramCanvas: React.FC = () => {
           selected: n.id === selectedNodeId,
           style: {
             ...n.style,
-            opacity: connectionState.isConnecting && connectionState.sourceNodeId !== n.id ? 0.6 : 1,
+            opacity:
+              connectionState.isConnecting &&
+              connectionState.sourceNodeId !== n.id
+                ? 0.6
+                : 1,
           },
         }))
       );
-      setEdges(eds =>
-        eds.map(e => ({
-          ...e,
-        }))
-      );
+      setEdges(eds => eds.map(e => ({ ...e })));
     }
-  }, [model.nodes, model.edges, selectedNodeId, setNodes, setEdges, connectionState.isConnecting, connectionState.sourceNodeId]);
+  }, [
+    model.nodes,
+    model.edges,
+    selectedNodeId,
+    setNodes,
+    setEdges,
+    connectionState.isConnecting,
+    connectionState.sourceNodeId,
+  ]);
 
-  // Modern edit/connector mode (same as before except...)
-  const onNodeClick = useCallback(
+  // FIX: Correct connector/edge logic
+  const onNodeClick = React.useCallback(
     (event: React.MouseEvent, node: Node) => {
       if (!connectionState.isConnecting) {
         setSelectedNode(node.id);
-        // Enter connector/edit mode if node is an action
         if (node.type === 'action') {
           startConnection(node.id);
         }
         return;
       }
-      // If in connector (edit) mode:
       const sourceId = connectionState.sourceNodeId!;
       if (sourceId === node.id) {
-        // Clicking again cancels
         cancelConnection();
         return;
       }
       const sourceNode = model.nodes.find(n => n.id === sourceId);
       if (!sourceNode) return;
-      // If click target is a block, re-parent the action to that block
+      // ONLY allow action/block connect to another block/action, not to phase, and prevent duplicates
+      const isAllowed =
+        (sourceNode.type === 'action' || sourceNode.type === 'block') &&
+        (node.type === 'action' || node.type === 'block') &&
+        canConnect(sourceId, node.id);
+
       if (sourceNode.type === 'action' && node.type === 'block') {
         nestActionInBlock(sourceNode.id, node.id);
         cancelConnection();
         return;
       }
-      // If both are actions/blocks, try to connect via edge
-      if (canConnect(sourceId, node.id)) {
+      // Connect only allowed combos (action->action, block->block, block->action, etc)
+      if (isAllowed) {
         completeConnection(node.id);
         return;
       }
       cancelConnection();
     },
-    [connectionState, setSelectedNode, startConnection, canConnect, completeConnection, cancelConnection, nestActionInBlock, model.nodes]
+    [
+      connectionState,
+      setSelectedNode,
+      startConnection,
+      canConnect,
+      completeConnection,
+      cancelConnection,
+      nestActionInBlock,
+      model.nodes,
+    ]
   );
 
   // Only persist drag, not width/height, since width/height is not a DiagramNode property.

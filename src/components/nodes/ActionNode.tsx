@@ -38,7 +38,8 @@ export const ActionNode: React.FC<ActionNodeProps> = ({ data, selected }) => {
           By: {data.performedBy.join(', ')}
         </div>
       )}
-      
+
+      {/* Only allow target+source handles */}
       <Handle type="target" position={Position.Left} className="w-3 h-3" />
       <Handle type="source" position={Position.Right} className="w-3 h-3" />
     </div>
