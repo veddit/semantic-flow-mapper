@@ -1,12 +1,21 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+
+import React from 'react';
+import { DiagramCanvas } from '../components/DiagramCanvas';
+import { Toolbar } from '../components/Toolbar';
 
 const Index = () => {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="text-4xl font-bold mb-4">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
-      </div>
+    <div className="h-screen flex flex-col">
+      <header className="bg-white border-b border-gray-200 p-4">
+        <h1 className="text-2xl font-bold text-gray-900">Semantic Service Diagrammer</h1>
+        <p className="text-gray-600">Visual-first, semantically strict service journey modeling</p>
+      </header>
+      
+      <Toolbar />
+      
+      <main className="flex-1">
+        <DiagramCanvas />
+      </main>
     </div>
   );
 };
