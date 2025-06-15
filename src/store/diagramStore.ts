@@ -1,5 +1,7 @@
+
 import { create } from 'zustand';
-import { DiagramModel, DiagramNode, DiagramEdge, ValidationError, Block } from '../types/diagram';
+import { DiagramModel, DiagramNode, DiagramEdge, ValidationError, Block, Phase, Action } from '../types/diagram';
+import { sampleDiagram } from './sampleDiagram';
 
 interface ConnectionState {
   isConnecting: boolean;
@@ -13,46 +15,31 @@ interface DiagramStore {
   selectedEdgeId: string | null;
   validationErrors: ValidationError[];
   connectionState: ConnectionState;
-  
-  // Node operations
   addNode: (node: DiagramNode) => void;
   updateNode: (id: string, updates: Partial<DiagramNode>) => void;
   deleteNode: (id: string) => void;
-  
-  // Edge operations
   addEdge: (edge: DiagramEdge) => void;
   updateEdge: (id: string, updates: Partial<DiagramEdge>) => void;
   deleteEdge: (id: string) => void;
-  
-  // Nesting operations
   nestActionInBlock: (actionId: string, blockId: string) => void;
   removeActionFromBlock: (actionId: string) => void;
-  
-  // Connection operations
   startConnection: (nodeId: string) => void;
   completeConnection: (targetNodeId: string, edgeType?: 'choice' | 'any' | 'parallel', descriptor?: string) => void;
   cancelConnection: () => void;
   setHoveredNode: (nodeId: string | null) => void;
   canConnect: (sourceId: string, targetId: string) => boolean;
-  
-  // Selection
   setSelectedNode: (id: string | null) => void;
   setSelectedEdge: (id: string | null) => void;
-  
-  // Validation
   validateModel: () => ValidationError[];
-  
-  // Export
   exportJSON: () => string;
-  
-  // Utilities
   generateId: (type: string) => string;
   getNodesByType: (type: string) => DiagramNode[];
   getChildNodes: (parentId: string) => DiagramNode[];
 }
 
 export const useDiagramStore = create<DiagramStore>((set, get) => ({
-  model: { nodes: [], edges: [] },
+  // 1. Init default sample diagram here:
+  model: sampleDiagram,
   selectedNodeId: null,
   selectedEdgeId: null,
   validationErrors: [],
@@ -70,25 +57,19 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
   },
 
   nestActionInBlock: (actionId, blockId) => {
-    console.log('nestActionInBlock called:', { actionId, blockId });
-
     set((state) => {
       const newNodes: DiagramNode[] = state.model.nodes.map(node => {
-        // If action node, update its parentBlock
+        // If action node, update its parentBlock only
         if (node.id === actionId && node.type === 'action') {
-          return {
-            ...node,
-            parentBlock: blockId,
-          };
+          const action = node as Action;
+          return { ...action, parentBlock: blockId } as Action;
         }
-        // If block node, add this action if not already present
+        // If block node, ensure type is Block and update childActions
         if (node.id === blockId && node.type === 'block') {
-          // We re-construct this as a Block, not as a generic node
           const block = node as Block;
-          const currentChildActions = Array.isArray(block.childActions) ? block.childActions : [];
-          const updatedChildActions = currentChildActions.includes(actionId)
-            ? currentChildActions
-            : [...currentChildActions, actionId];
+          const updatedChildActions = block.childActions.includes(actionId)
+            ? block.childActions
+            : [...block.childActions, actionId];
           return {
             id: block.id,
             label: block.label,
@@ -100,7 +81,6 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
         }
         return node;
       });
-
       return {
         model: {
           ...state.model,
@@ -117,13 +97,15 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
         ...state.model,
         nodes: state.model.nodes.map(node => {
           if (node.id === actionId && node.type === 'action') {
-            return { ...node, parentBlock: null };
+            const action = node as Action;
+            return { ...action, parentBlock: null } as Action;
           }
-          if (node.type === 'block' && 'childActions' in node) {
-            return { 
-              ...node, 
-              childActions: node.childActions.filter(id => id !== actionId)
-            };
+          if (node.type === 'block') {
+            const block = node as Block;
+            return {
+              ...block,
+              childActions: block.childActions.filter(id => id !== actionId)
+            } as Block;
           }
           return node;
         })
@@ -144,12 +126,10 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
 
   completeConnection: (targetNodeId, edgeType = 'any', descriptor) => {
     const { connectionState, addEdge, generateId, canConnect } = get();
-    
     if (!connectionState.sourceNodeId || !canConnect(connectionState.sourceNodeId, targetNodeId)) {
       get().cancelConnection();
       return;
     }
-
     const newEdge: DiagramEdge = {
       id: generateId('edge'),
       from: connectionState.sourceNodeId,
@@ -157,7 +137,6 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
       type: edgeType,
       descriptor,
     };
-
     addEdge(newEdge);
     get().cancelConnection();
   },
@@ -185,9 +164,7 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
     const { model } = get();
     const sourceNode = model.nodes.find(n => n.id === sourceId);
     const targetNode = model.nodes.find(n => n.id === targetId);
-    
     if (!sourceNode || !targetNode || sourceId === targetId) return false;
-
     // Actions and blocks can connect to other actions and blocks
     return (sourceNode.type === 'action' || sourceNode.type === 'block') && 
            (targetNode.type === 'action' || targetNode.type === 'block');
@@ -207,18 +184,22 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
     set((state) => ({
       model: {
         ...state.model,
-        nodes: state.model.nodes.map(node =>
-          node.id === id
-            ? {
-                ...node,
-                ...updates,
-                // Allow e.g. custom position, width, or height for free-drag/resizing
-              }
-            : node
-        ),
+        nodes: state.model.nodes.map(node => {
+          if (node.id !== id) return node;
+          // Only spread allowed fields per type
+          if (node.type === 'phase') {
+            return { ...node, ...updates } as Phase;
+          }
+          if (node.type === 'block') {
+            return { ...node, ...updates } as Block;
+          }
+          if (node.type === 'action') {
+            return { ...node, ...updates } as Action;
+          }
+          return node;
+        }),
       },
     }));
-    // Only validate, do not auto-layout here!
     get().validateModel();
   },
 
@@ -281,7 +262,6 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
   validateModel: () => {
     const { model } = get();
     const errors: ValidationError[] = [];
-
     // Check each phase has at least one block
     const phases = model.nodes.filter(n => n.type === 'phase');
     phases.forEach(phase => {
@@ -294,7 +274,6 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
         });
       }
     });
-
     // Check each block has at least one action
     const blocks = model.nodes.filter(n => n.type === 'block');
     blocks.forEach(block => {
@@ -309,7 +288,6 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
         });
       }
     });
-
     // Check for orphaned actions
     const orphanedActions = model.nodes.filter(n => 
       n.type === 'action' && 'parentBlock' in n && !n.parentBlock
@@ -321,7 +299,6 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
         nodeId: action.id
       });
     });
-
     set({ validationErrors: errors });
     return errors;
   },
