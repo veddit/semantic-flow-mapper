@@ -1,12 +1,16 @@
+
 import React, { useCallback } from 'react';
-import { Handle, Position } from 'reactflow';
+import { Handle, Position } from '@xyflow/react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useDiagramStore } from '../../store/diagramStore';
-import { NodeData } from '../../types/reactflow';
+import { useTraceLogger } from '../../hooks/useTraceLogger';
 import { Block, Action } from '../../types/diagram';
-import './BlockNode.css';
 
-export const BlockNode: React.FC<NodeData<Block>> = ({ data }) => {
+interface BlockNodeProps {
+  data: Block;
+}
+
+export const BlockNode: React.FC<BlockNodeProps> = ({ data }) => {
   const { 
     model, 
     connectionState, 
@@ -16,8 +20,10 @@ export const BlockNode: React.FC<NodeData<Block>> = ({ data }) => {
     canConnect 
   } = useDiagramStore();
 
-  const trace = (msg: string) => {
-    console.log(`[BLOCK-${data.id}] ${msg}`);
+  const { trace } = useTraceLogger();
+
+  const logTrace = (msg: string) => {
+    trace(`[BLOCK-${data.id}] ${msg}`);
   };
 
   const getChildActions = useCallback(() => {
@@ -25,30 +31,30 @@ export const BlockNode: React.FC<NodeData<Block>> = ({ data }) => {
   }, [model.nodes, data.id]);
 
   const handleActionHeaderClick = (actionId: string) => {
-    trace(`Action header clicked: ${actionId}`);
+    logTrace(`Action header clicked: ${actionId}`);
     
     if (connectionState.isConnecting) {
       if (connectionState.sourceNodeId === actionId) {
-        trace(`Same action clicked - cancelling connection`);
+        logTrace(`Same action clicked - cancelling connection`);
         cancelConnection();
         return;
       }
       
-      trace(`Attempting to complete connection: ${connectionState.sourceNodeId} → ${actionId}`);
+      logTrace(`Attempting to complete connection: ${connectionState.sourceNodeId} → ${actionId}`);
       if (canConnect(connectionState.sourceNodeId, actionId)) {
         completeConnection(actionId);
       } else {
-        trace(`Connection not allowed`);
+        logTrace(`Connection not allowed`);
         cancelConnection();
       }
     } else {
-      trace(`Starting new connection from ${actionId}`);
+      logTrace(`Starting new connection from ${actionId}`);
       startConnection(actionId);
     }
   };
 
   const handleActionContentClick = (actionId: string) => {
-    trace(`Action content clicked: ${actionId} - opening edit modal`);
+    logTrace(`Action content clicked: ${actionId} - opening edit modal`);
     // TODO: Implement edit modal
   };
 
@@ -59,38 +65,43 @@ export const BlockNode: React.FC<NodeData<Block>> = ({ data }) => {
     const hasChildren = edges.length > 0;
     
     return (
-      <div key={action.id} className="action-item">
+      <div key={action.id} className="mb-2">
         <div 
-          className={`action-card ${connectionState.sourceNodeId === action.id ? 'connecting' : ''}`}
+          className={`
+            border rounded-lg p-2 bg-white shadow-sm
+            ${connectionState.sourceNodeId === action.id ? 'ring-2 ring-blue-500' : ''}
+          `}
           style={{ marginLeft: `${level * 16}px` }}
         >
           <div 
-            className="action-header"
+            className="cursor-pointer hover:bg-gray-50 p-1 rounded"
             onClick={() => handleActionHeaderClick(action.id)}
           >
-            <span className="action-title">{action.label}</span>
-            {connectionState.isConnecting && connectionState.sourceNodeId !== action.id && (
-              <span className="connection-hint">Tap to connect</span>
-            )}
+            <div className="flex items-center justify-between">
+              <span className="font-medium text-sm">{action.label}</span>
+              {connectionState.isConnecting && connectionState.sourceNodeId !== action.id && (
+                <span className="text-xs text-blue-600">Tap to connect</span>
+              )}
+            </div>
           </div>
           <div 
-            className="action-content"
+            className="cursor-pointer hover:bg-gray-50 p-1 rounded mt-1"
             onClick={() => handleActionContentClick(action.id)}
           >
-            <div className="performed-by">
+            <div className="text-xs text-gray-600">
               {action.performedBy.length > 0 ? (
                 action.performedBy.map(actor => (
-                  <span key={actor} className="actor-badge">{actor}</span>
+                  <span key={actor} className="inline-block bg-gray-200 rounded px-1 mr-1">{actor}</span>
                 ))
               ) : (
-                <span className="no-actors">No actors</span>
+                <span className="text-gray-400">No actors</span>
               )}
             </div>
           </div>
         </div>
         
         {hasChildren && (
-          <div className="children-container">
+          <div className="ml-4 mt-1">
             {edges.map(edge => {
               const targetAction = childActions.find(a => a.id === edge.to);
               if (targetAction) {
@@ -105,13 +116,17 @@ export const BlockNode: React.FC<NodeData<Block>> = ({ data }) => {
   };
 
   return (
-    <Card className="block-node">
-      <CardHeader>
-        <CardTitle>{data.label}</CardTitle>
+    <Card className="min-w-[250px] bg-white border border-gray-300">
+      <CardHeader className="bg-blue-50 border-b border-blue-200 py-3">
+        <CardTitle className="text-sm font-semibold text-blue-800">{data.label}</CardTitle>
       </CardHeader>
-      <CardContent className="p-2">
-        <div className="actions-container">
-          {childActions.map(action => renderActionNode(action))}
+      <CardContent className="p-3 bg-gray-50">
+        <div className="space-y-2">
+          {childActions.length > 0 ? (
+            childActions.map(action => renderActionNode(action))
+          ) : (
+            <div className="text-xs text-gray-500 italic">No actions in this block</div>
+          )}
         </div>
       </CardContent>
       <Handle type="target" position={Position.Top} id="top" />
