@@ -31,6 +31,7 @@ interface DiagramStore {
   setSelectedEdge: (id: string | null) => void;
   validateModel: () => ValidationError[];
   exportJSON: () => string;
+  updateModelFromJSON: (newModel: DiagramModel) => void;
   generateId: (type: string) => string;
   getNodesByType: (type: string) => DiagramNode[];
   getChildNodes: (parentId: string) => DiagramNode[];
@@ -335,5 +336,10 @@ export const useDiagramStore = create<DiagramStore>((set, get) => ({
 
   exportJSON: () => {
     return JSON.stringify(get().model, null, 2);
+  },
+
+  updateModelFromJSON: (newModel: DiagramModel) => {
+    set({ model: newModel });
+    get().validateModel();
   }
 }));
