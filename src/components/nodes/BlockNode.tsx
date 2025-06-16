@@ -60,9 +60,51 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data }) => {
 
   const childActions = getChildActions();
 
-  const renderActionNode = (action: Action, level = 0) => {
-    const edges = model.edges.filter(edge => edge.from === action.id);
-    const hasChildren = edges.length > 0;
+  // Build a tree structure of actions to avoid infinite recursion
+  const buildActionTree = useCallback(() => {
+    const actionMap = new Map(childActions.map(action => [action.id, action]));
+    const visited = new Set<string>();
+    const roots: Action[] = [];
+
+    // Find root actions (actions with no incoming edges from other actions in this block)
+    childActions.forEach(action => {
+      const hasIncomingEdge = model.edges.some(edge => 
+        edge.to === action.id && 
+        childActions.some(child => child.id === edge.from)
+      );
+      
+      if (!hasIncomingEdge) {
+        roots.push(action);
+      }
+    });
+
+    // If no roots found, all actions are roots to prevent infinite loops
+    if (roots.length === 0) {
+      return childActions.map(action => ({ action, children: [] }));
+    }
+
+    const buildChildren = (action: Action, depth = 0): { action: Action; children: any[] } => {
+      // Prevent infinite recursion with depth limit and visited check
+      if (depth > 10 || visited.has(action.id)) {
+        return { action, children: [] };
+      }
+      
+      visited.add(action.id);
+      
+      const childEdges = model.edges.filter(edge => edge.from === action.id);
+      const children = childEdges
+        .map(edge => actionMap.get(edge.to))
+        .filter(Boolean)
+        .map(childAction => buildChildren(childAction!, depth + 1));
+      
+      return { action, children };
+    };
+
+    return roots.map(root => buildChildren(root));
+  }, [childActions, model.edges]);
+
+  const renderActionNode = (actionData: { action: Action; children: any[] }, level = 0) => {
+    const { action, children } = actionData;
     
     return (
       <div key={action.id} className="mb-2">
@@ -100,20 +142,16 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data }) => {
           </div>
         </div>
         
-        {hasChildren && (
+        {children.length > 0 && (
           <div className="ml-4 mt-1">
-            {edges.map(edge => {
-              const targetAction = childActions.find(a => a.id === edge.to);
-              if (targetAction) {
-                return renderActionNode(targetAction, level + 1);
-              }
-              return null;
-            })}
+            {children.map(child => renderActionNode(child, level + 1))}
           </div>
         )}
       </div>
     );
   };
+
+  const actionTree = buildActionTree();
 
   return (
     <Card className="min-w-[250px] bg-white border border-gray-300">
@@ -122,8 +160,8 @@ export const BlockNode: React.FC<BlockNodeProps> = ({ data }) => {
       </CardHeader>
       <CardContent className="p-3 bg-gray-50">
         <div className="space-y-2">
-          {childActions.length > 0 ? (
-            childActions.map(action => renderActionNode(action))
+          {actionTree.length > 0 ? (
+            actionTree.map(actionData => renderActionNode(actionData))
           ) : (
             <div className="text-xs text-gray-500 italic">No actions in this block</div>
           )}
