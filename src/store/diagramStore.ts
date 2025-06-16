@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { DiagramModel, DiagramNode, DiagramEdge, ValidationError, Block, Phase, Action } from '../types/diagram';
-import { sampleDiagram } from './sampleDiagram';
+import { sampleDiagramWithBranching } from './sampleDiagramWithBranching';
 
 interface ConnectionState {
   isConnecting: boolean;
@@ -37,8 +37,8 @@ interface DiagramStore {
 }
 
 export const useDiagramStore = create<DiagramStore>((set, get) => ({
-  // 1. Init default sample diagram here:
-  model: sampleDiagram,
+  // Use the new sample diagram with branching
+  model: sampleDiagramWithBranching,
   selectedNodeId: null,
   selectedEdgeId: null,
   validationErrors: [],

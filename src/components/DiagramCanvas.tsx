@@ -1,3 +1,4 @@
+
 import React, { useCallback, useEffect, useRef } from 'react';
 import {
   ReactFlow,
@@ -47,10 +48,26 @@ export const DiagramCanvas: React.FC = () => {
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const layoutRef = useRef<any>(null);
 
-  // Only trigger auto-layout if requested; by default, allow persistent dragging/resizing.
+  // Filter out actions that are nested in blocks from the main canvas
+  const getVisibleNodes = useCallback(() => {
+    return model.nodes.filter(node => {
+      // Show all phases and blocks
+      if (node.type === 'phase' || node.type === 'block') {
+        return true;
+      }
+      // Only show actions that are NOT nested in any block (orphaned actions)
+      if (node.type === 'action') {
+        return !node.parentBlock;
+      }
+      return true;
+    });
+  }, [model.nodes]);
+
   React.useEffect(() => {
+    const visibleNodes = getVisibleNodes();
+    
     if (!layoutRef.current) {
-      const layout = calculateLayout(model);
+      const layout = calculateLayout({ ...model, nodes: visibleNodes });
       layoutRef.current = layout;
       setNodes(
         layout.nodes.map(node => ({
@@ -96,18 +113,29 @@ export const DiagramCanvas: React.FC = () => {
       );
     } else {
       setNodes(nds =>
-        nds.map(n => ({
-          ...n,
-          selected: n.id === selectedNodeId,
-          style: {
-            ...n.style,
-            opacity:
-              connectionState.isConnecting &&
-              connectionState.sourceNodeId !== n.id
-                ? 0.6
-                : 1,
-          },
-        }))
+        nds.map(n => {
+          // Find the corresponding node in visible nodes
+          const modelNode = visibleNodes.find(mn => mn.id === n.id);
+          if (!modelNode) {
+            // This node should be hidden (it's a nested action)
+            return { ...n, hidden: true };
+          }
+          
+          return {
+            ...n,
+            hidden: false,
+            selected: n.id === selectedNodeId,
+            data: { ...modelNode },
+            style: {
+              ...n.style,
+              opacity:
+                connectionState.isConnecting &&
+                connectionState.sourceNodeId !== n.id
+                  ? 0.6
+                  : 1,
+            },
+          };
+        }).filter(n => !n.hidden)
       );
       setEdges(eds => eds.map(e => ({ ...e })));
     }
@@ -119,37 +147,43 @@ export const DiagramCanvas: React.FC = () => {
     setEdges,
     connectionState.isConnecting,
     connectionState.sourceNodeId,
+    getVisibleNodes,
   ]);
 
-  // FIX: Correct connector/edge logic
   const onNodeClick = React.useCallback(
     (event: React.MouseEvent, node: Node) => {
       if (!connectionState.isConnecting) {
         setSelectedNode(node.id);
-        if (node.type === 'action') {
-          startConnection(node.id);
+        // Toggle block expansion on click
+        if (node.type === 'block') {
+          const blockData = node.data;
+          updateNode(node.id, { expanded: !blockData.expanded });
         }
         return;
       }
+      
       const sourceId = connectionState.sourceNodeId!;
       if (sourceId === node.id) {
         cancelConnection();
         return;
       }
+      
       const sourceNode = model.nodes.find(n => n.id === sourceId);
       if (!sourceNode) return;
-      // ONLY allow action/block connect to another block/action, not to phase, and prevent duplicates
-      const isAllowed =
-        (sourceNode.type === 'action' || sourceNode.type === 'block') &&
-        (node.type === 'action' || node.type === 'block') &&
-        canConnect(sourceId, node.id);
-
+      
+      // Handle action to block nesting
       if (sourceNode.type === 'action' && node.type === 'block') {
         nestActionInBlock(sourceNode.id, node.id);
         cancelConnection();
         return;
       }
-      // Connect only allowed combos (action->action, block->block, block->action, etc)
+      
+      // Handle regular connections
+      const isAllowed =
+        (sourceNode.type === 'action' || sourceNode.type === 'block') &&
+        (node.type === 'action' || node.type === 'block') &&
+        canConnect(sourceId, node.id);
+
       if (isAllowed) {
         completeConnection(node.id);
         return;
@@ -159,7 +193,7 @@ export const DiagramCanvas: React.FC = () => {
     [
       connectionState,
       setSelectedNode,
-      startConnection,
+      updateNode,
       canConnect,
       completeConnection,
       cancelConnection,
@@ -176,22 +210,18 @@ export const DiagramCanvas: React.FC = () => {
         if (change.type === 'position' && change.position) {
           updateNode(change.id, { position: change.position });
         }
-        // Removed any attempt to updateNode(..., { width, height }), as those are visual only.
       });
     },
     [onNodesChange, updateNode]
   );
 
-  // No snapping—persistent positions.
   const onNodeDragStop = useCallback(
     (event: React.MouseEvent, node: Node) => {
-      // Dragging only updates position in store (handled by onNodesChange)
       setSelectedNode(node.id);
     },
     [setSelectedNode]
   );
 
-  // Enable clicking empty space to clear edit/connector mode
   const onPaneClick = useCallback(
     () => {
       if (connectionState.isConnecting) {
@@ -208,7 +238,7 @@ export const DiagramCanvas: React.FC = () => {
       {connectionState.isConnecting && (
         <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg">
           <p className="text-sm font-medium">
-            Click an action to link, or click a block to assign as parent
+            Click an action to connect, click a block to nest action, or click empty space to cancel
           </p>
         </div>
       )}
