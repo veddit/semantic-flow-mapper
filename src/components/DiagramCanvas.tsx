@@ -1,4 +1,3 @@
-
 import React, { useCallback, useEffect, useRef } from 'react';
 import {
   ReactFlow,
@@ -152,43 +151,52 @@ export const DiagramCanvas: React.FC = () => {
 
   const onNodeClick = React.useCallback(
     (event: React.MouseEvent, node: Node) => {
-      if (!connectionState.isConnecting) {
+      // Only handle clicks on orphaned actions and blocks
+      if (node.type === 'action' && !node.data.parentBlock && !connectionState.isConnecting) {
         setSelectedNode(node.id);
-        // Toggle block expansion on click
-        if (node.type === 'block') {
+        return;
+      }
+      
+      if (node.type === 'block') {
+        if (!connectionState.isConnecting) {
+          setSelectedNode(node.id);
+          // Toggle block expansion on click
           const blockData = node.data;
           updateNode(node.id, { expanded: !blockData.expanded });
         }
         return;
       }
       
-      const sourceId = connectionState.sourceNodeId!;
-      if (sourceId === node.id) {
-        cancelConnection();
-        return;
-      }
-      
-      const sourceNode = model.nodes.find(n => n.id === sourceId);
-      if (!sourceNode) return;
-      
-      // Handle action to block nesting
-      if (sourceNode.type === 'action' && node.type === 'block') {
-        nestActionInBlock(sourceNode.id, node.id);
-        cancelConnection();
-        return;
-      }
-      
-      // Handle regular connections
-      const isAllowed =
-        (sourceNode.type === 'action' || sourceNode.type === 'block') &&
-        (node.type === 'action' || node.type === 'block') &&
-        canConnect(sourceId, node.id);
+      // Handle orphaned action nesting in blocks when connecting
+      if (connectionState.isConnecting) {
+        const sourceId = connectionState.sourceNodeId!;
+        if (sourceId === node.id) {
+          cancelConnection();
+          return;
+        }
+        
+        const sourceNode = model.nodes.find(n => n.id === sourceId);
+        if (!sourceNode) return;
+        
+        // Handle action to block nesting
+        if (sourceNode.type === 'action' && node.type === 'block') {
+          nestActionInBlock(sourceNode.id, node.id);
+          cancelConnection();
+          return;
+        }
+        
+        // Handle regular connections between orphaned actions
+        const isAllowed =
+          (sourceNode.type === 'action' || sourceNode.type === 'block') &&
+          (node.type === 'action' || node.type === 'block') &&
+          canConnect(sourceId, node.id);
 
-      if (isAllowed) {
-        completeConnection(node.id);
-        return;
+        if (isAllowed) {
+          completeConnection(node.id);
+          return;
+        }
+        cancelConnection();
       }
-      cancelConnection();
     },
     [
       connectionState,
@@ -238,7 +246,7 @@ export const DiagramCanvas: React.FC = () => {
       {connectionState.isConnecting && (
         <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg">
           <p className="text-sm font-medium">
-            Click an action to connect, click a block to nest action, or click empty space to cancel
+            Tap another action to connect, or tap empty space to cancel
           </p>
         </div>
       )}

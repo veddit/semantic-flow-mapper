@@ -14,9 +14,7 @@ export const Toolbar: React.FC = () => {
     generateId, 
     model, 
     exportJSON, 
-    connectionState, 
-    startConnection, 
-    cancelConnection 
+    connectionState
   } = useDiagramStore();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [nodeType, setNodeType] = useState<'phase' | 'block' | 'action'>('phase');
@@ -165,14 +163,6 @@ export const Toolbar: React.FC = () => {
           </div>
         </DialogContent>
       </Dialog>
-
-      <Button 
-        onClick={connectionState.isConnecting ? cancelConnection : () => {}}
-        variant={connectionState.isConnecting ? "destructive" : "outline"}
-        disabled={model.nodes.length < 2}
-      >
-        {connectionState.isConnecting ? 'Cancel Connect' : 'Connect Mode'}
-      </Button>
 
       <Button onClick={handleExport} variant="outline">
         Export JSON
